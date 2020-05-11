@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using CSGIGUserServer;
 using Microsoft.AspNet.OData.Builder;
 using Microsoft.AspNet.OData.Extensions;
 using Microsoft.AspNetCore.Builder;
@@ -18,12 +19,10 @@ namespace CSGIGODataCore
 {
     public class Startup
     {
-
-        readonly string MyAllowSpecificOrigins = "_myAllowSpecificOrigins";
-
         public Startup(IConfiguration configuration)
         {
             Configuration = configuration;
+
         }
 
         public IConfiguration Configuration { get; }
@@ -31,21 +30,16 @@ namespace CSGIGODataCore
         // This method gets called by the runtime. Use this method to add services to the container.
         public void ConfigureServices(IServiceCollection services)
         {
+            services.AddDbContext<Context>();
 
-            services.AddMvc();
-            services.AddControllers(mvcOptions =>
-                mvcOptions.EnableEndpointRouting = false);
+            services.AddMvc().SetCompatibilityVersion(CompatibilityVersion.Version_3_0);
+
+            services.AddControllers().AddNewtonsoftJson();
 
             services.AddOData();
 
-            services.AddCors(options =>
-            {
-                options.AddPolicy(name: MyAllowSpecificOrigins,
-                                  builder =>
-                                  {
-                                      builder.WithOrigins("*");
-                                  });
-            });
+            services.AddMvcCore(action => action.EnableEndpointRouting = false);
+
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
@@ -57,26 +51,33 @@ namespace CSGIGODataCore
             }
 
             app.UseHttpsRedirection();
+
             app.UseRouting();
 
-            app.UseCors(MyAllowSpecificOrigins);
-
             app.UseAuthorization();
-            var builder = new ODataConventionModelBuilder(app.ApplicationServices);
-
-            builder.EntitySet<User>("Users");
-
 
             app.UseMvc(routeBuilder =>
             {
-                // and this line to enable OData query option, for example $filter
-
-                routeBuilder.Expand().Select().OrderBy().Filter();
-                routeBuilder.EnableDependencyInjection();
-
-                routeBuilder.MapODataServiceRoute("ODataRoute", "api", builder.GetEdmModel());
-
+                routeBuilder.Select().Filter().Expand().OrderBy().Count().MaxTop(null);
+                routeBuilder.MapODataServiceRoute("odata", "odata", GetEdmModel());
             });
+
+
+            app.UseEndpoints(endpoints =>
+            {
+                endpoints.MapControllers();
+                endpoints.EnableDependencyInjection();
+                endpoints.Select().Filter().Expand().OrderBy().Count().MaxTop(null);
+            });
+
         }
+        private IEdmModel GetEdmModel()
+        {
+            var odataBuilder = new ODataConventionModelBuilder();
+            odataBuilder.EntitySet<User>("Users");
+
+            return odataBuilder.GetEdmModel();
+        }
+
     }
 }
